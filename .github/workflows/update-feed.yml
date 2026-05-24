@@ -1,0 +1,84 @@
+name: Regenerate PeriniCinema Multi-Source Feed
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # Daily at 6:00am UTC (midnight MDT)
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: 'Sources to run (comma-separated: archive,pluto,spotify,tubi,wurl) or leave blank for all'
+        required: false
+        default: ''
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate multi-source feed
+        run: |
+          if [ -n "${{ github.event.inputs.sources }}" ]; then
+            echo "Running selected sources: ${{ github.event.inputs.sources }}"
+            node generate-feed.js --only=${{ github.event.inputs.sources }}
+          else
+            echo "Running all sources"
+            node generate-feed.js
+          fi
+        env:
+          SPOTIFY_CLIENT_ID:     ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          TUBI_ENABLED:          ${{ secrets.TUBI_ENABLED }}
+          TUBI_API_KEY:          ${{ secrets.TUBI_API_KEY }}
+          TUBI_PARTNER_ID:       ${{ secrets.TUBI_PARTNER_ID }}
+          WURL_ENABLED:          ${{ secrets.WURL_ENABLED }}
+          WURL_API_KEY:          ${{ secrets.WURL_API_KEY }}
+          WURL_CHANNEL_IDS:      ${{ secrets.WURL_CHANNEL_IDS }}
+
+      - name: Verify feed
+        run: |
+          if [ ! -f public/feed.json ]; then
+            echo "❌ feed.json was not created"
+            exit 1
+          fi
+          echo "✅ feed.json created"
+          echo "Size: $(wc -c < public/feed.json) bytes"
+          node -e "
+            const f = require('./public/feed.json');
+            const m = f._meta;
+            console.log('Total items:   ', m.totalItems);
+            console.log('Generated at:  ', m.generatedAt);
+            console.log('Elapsed:       ', m.elapsedSec + 's');
+            console.log('Sources:');
+            for (const [k,v] of Object.entries(m.sources)) {
+              console.log('  ' + k.padEnd(12), v);
+            }
+          "
+
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: './public'
+          production-deploy: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Auto feed — ${{ github.event.inputs.sources || 'all sources' }} — ${{ github.run_id }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID:    ${{ secrets.NETLIFY_SITE_ID }}
+
+      - name: Done
+        run: echo "✅ Feed deployed at $(date -u)"

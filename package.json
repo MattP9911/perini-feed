@@ -1,0 +1,20 @@
+{
+  "name": "perini-cinema-multifeed",
+  "version": "2.0.0",
+  "description": "PeriniCinema – Multi-source feed generator",
+  "private": true,
+  "scripts": {
+    "generate": "node generate-feed.js",
+    "generate:archive": "node generate-feed.js --only=archive",
+    "generate:pluto": "node generate-feed.js --only=pluto",
+    "generate:spotify": "node generate-feed.js --only=spotify",
+    "test": "node test-feed.js",
+    "preview": "npx serve public --listen 8080"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
